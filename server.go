@@ -7,8 +7,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"time"
 
-	oidc "github.com/coreos/go-oidc"
+	"github.com/coreos/go-oidc"
+	"github.com/gorilla/securecookie"
 	"github.com/gorilla/sessions"
 	"github.com/pkg/errors"
 	"github.com/tevino/abool"
@@ -51,6 +53,13 @@ type server struct {
 	userIDOpts
 	caBundle []byte
 }
+
+var secureCookie = securecookie.New(
+	// Hash Key
+	securecookie.GenerateRandomKey(64),
+	// Encryption Key
+	securecookie.GenerateRandomKey(32),
+)
 
 func (s *server) authenticate(w http.ResponseWriter, r *http.Request) {
 
@@ -95,14 +104,28 @@ func (s *server) authCodeFlowAuthenticationRequest(w http.ResponseWriter, r *htt
 
 	// Initiate OIDC Flow with Authorization Request.
 	state := newState(r.URL.String())
-	id, err := state.save(s.store)
+	encoded, err := secureCookie.Encode(oauthStateCookie, state)
+	if err != nil {
+		logger.Errorf("Failed to save state in encrypted cookie: %v", err)
+		returnMessage(w, http.StatusInternalServerError, "Failed to save state in encrypted cookie.")
+		return
+	}
+	cookie := &http.Cookie{
+		Name:     oauthStateCookie,
+		Value:    encoded,
+		Path:     "/",
+		HttpOnly: true,
+		MaxAge:   int(20 * time.Minute),
+	}
+	http.SetCookie(w, cookie)
+
 	if err != nil {
 		logger.Errorf("Failed to save state in store: %v", err)
 		returnMessage(w, http.StatusInternalServerError, "Failed to save state in store.")
 		return
 	}
 
-	http.Redirect(w, r, s.oauth2Config.AuthCodeURL(id), http.StatusFound)
+	http.Redirect(w, r, s.oauth2Config.AuthCodeURL(encoded), http.StatusFound)
 }
 
 // callback is the handler responsible for exchanging the auth_code and retrieving an id_token.
@@ -118,21 +141,36 @@ func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get state and:
-	// 1. Confirm it exists in our memory.
-	// 2. Get the original URL associated with it.
-	var stateID = r.FormValue("state")
-	if len(stateID) == 0 {
+	// Get state from cookie and http param and:
+	// 1. Confirm the two values match.
+	// 2. Confirm we issued the state value by decoding it.
+	// 2. Get the original URL associated with the state value.
+	var stateParam = r.FormValue("state")
+	if len(stateParam) == 0 {
 		logger.Error("Missing url parameter: state")
 		returnMessage(w, http.StatusBadRequest, "Missing url parameter: state")
 		return
 	}
 
 	// If state is loaded, then it's correct, as it is saved by its id.
-	state, err := load(s.store, stateID)
+	stateCookie, err := r.Cookie(oauthStateCookie)
 	if err != nil {
-		logger.Errorf("Failed to retrieve state from store: %v", err)
-		returnMessage(w, http.StatusInternalServerError, "Failed to retrieve state.")
+		logger.Error("Missing cookie: state")
+		returnMessage(w, http.StatusBadRequest, "Missing cookie: state")
+		return
+	}
+	if stateParam != stateCookie.Value {
+		logger.Error("State value from http params doesn't match value in cookie. Possible CSRF attack.")
+		returnMessage(w, http.StatusBadRequest, "State value from http params doesn't match value in cookie. Possible CSRF attack.")
+		return
+	}
+
+	var state *State
+	err = secureCookie.Decode(oauthStateCookie, stateParam, &state)
+	if err != nil {
+		logger.Errorf("Failed to decode oauth state parameter: %v", err)
+		returnMessage(w, http.StatusInternalServerError, "Failed to decode oauth state parameter.")
+		return
 	}
 
 	ctx := setTLSContext(r.Context(), s.caBundle)
@@ -201,7 +239,7 @@ func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 	logger.Info("Login validated with ID token, redirecting.")
 
 	// Getting original destination from DB with state
-	var destination = state.origURL
+	var destination = state.FirstVisitedURL
 	if s.afterLoginRedirectURL != "" {
 		destination = s.afterLoginRedirectURL
 	}
