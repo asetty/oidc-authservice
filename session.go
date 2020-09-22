@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"net/http"
 
 	"github.com/coreos/go-oidc"
@@ -44,7 +45,9 @@ func sessionFromRequest(r *http.Request, store sessions.Store, cookie,
 
 	// Get session from header or cookie
 	sessionID := getBearerToken(r.Header.Get(header))
+	log.Printf("header=%s -- %s", header, r.Header.Get(header))
 	if sessionID != "" {
+		log.Printf("getting session from id=%s", sessionID)
 		return sessionFromID(sessionID, store)
 	}
 	return store.Get(r, cookie)

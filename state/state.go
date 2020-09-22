@@ -48,6 +48,7 @@ func newSchemeAndHost(config *Config) StateFunc {
 		// Use header value if it exists
 		s := r.Header.Get(config.SchemeHeader)
 		if s == "" {
+			log.Printf("scheme header %q not found", config.SchemeHeader)
 			s = config.SchemeDefault
 		}
 		// XXX Could return an error here. Would require changing the StateFunc type

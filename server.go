@@ -16,6 +16,7 @@ import (
 	oidc "github.com/coreos/go-oidc"
 	"github.com/gorilla/sessions"
 	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 	"github.com/tevino/abool"
 	"golang.org/x/oauth2"
 	"k8s.io/apiserver/pkg/authentication/authenticator"
@@ -74,7 +75,8 @@ func (s *server) authenticate(w http.ResponseWriter, r *http.Request) {
 
 	logger := loggerForRequest(r)
 	logger.Info("Authenticating request...")
-
+	logger.Infof("request=%+v", r)
+	logger.Infof("authenticators=%+v", s.authenticators)
 	var userInfo user.Info
 	for i, auth := range s.authenticators {
 		resp, found, err := auth.AuthenticateRequest(r)
@@ -89,9 +91,12 @@ func (s *server) authenticate(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if found {
+			log.Println("found")
 			userInfo = resp.User
 			logger.Infof("UserInfo: %+v", userInfo)
 			break
+		} else {
+			log.Println("not found")
 		}
 	}
 	if userInfo == nil {
@@ -167,7 +172,6 @@ func (s *server) authenticate(w http.ResponseWriter, r *http.Request) {
 // authCodeFlowAuthenticationRequest initiates an OIDC Authorization Code flow
 func (s *server) authCodeFlowAuthenticationRequest(w http.ResponseWriter, r *http.Request) {
 	logger := loggerForRequest(r)
-
 	// Initiate OIDC Flow with Authorization Request.
 	reqState := s.newState(r)
 	id, err := reqState.Save(s.store)
@@ -182,8 +186,8 @@ func (s *server) authCodeFlowAuthenticationRequest(w http.ResponseWriter, r *htt
 
 // callback is the handler responsible for exchanging the auth_code and retrieving an id_token.
 func (s *server) callback(w http.ResponseWriter, r *http.Request) {
-
 	logger := loggerForRequest(r)
+	log.Printf("callback function request=%+v", r)
 
 	// Get authorization code from authorization response.
 	var authCode = r.FormValue("code")
@@ -209,6 +213,7 @@ func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 		logger.Errorf("Failed to retrieve state from store: %v", err)
 		returnMessage(w, http.StatusInternalServerError, "Failed to retrieve state.")
 	}
+	log.Printf("state=%+v", *reqState)
 
 	ctx := setTLSContext(r.Context(), s.caBundle)
 	// Exchange the authorization code with {access, refresh, id}_token
@@ -250,6 +255,9 @@ func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	log.Printf("oidcUserInfo=%+v", oidcUserInfo)
+	log.Printf("claims=%v", claims)
+
 	// User is authenticated, create new session.
 	session := sessions.NewSession(s.store, userSessionCookie)
 	session.Options.MaxAge = s.sessionMaxAgeSeconds
@@ -282,6 +290,7 @@ func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 	session.Values[userSessionClaims] = claims
 	session.Values[userSessionIDToken] = rawIDToken
 	session.Values[userSessionOAuth2Tokens] = oauth2Tokens
+	logger.Printf("user session.Values=%+v", session.Values)
 	if err := session.Save(r, w); err != nil {
 		logger.Errorf("Couldn't create user session: %v", err)
 		returnMessage(w, http.StatusInternalServerError, "Error creating user session")
@@ -295,6 +304,8 @@ func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 	if s.afterLoginRedirectURL != "" {
 		destination = s.afterLoginRedirectURL
 	}
+	log.Printf("redirect request=%+v", r)
+	log.Printf("redirect destination=%s", destination)
 
 	http.Redirect(w, r, destination, http.StatusFound)
 }
