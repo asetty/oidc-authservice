@@ -1,6 +1,7 @@
 package main
 
 import (
+	"log"
 	"net/http"
 	"net/http/httptest"
 
@@ -39,12 +40,14 @@ func (sa *sessionAuthenticator) AuthenticateRequest(r *http.Request) (*authentic
 
 	// Get session from header or cookie
 	session, err := sessionFromRequest(r, sa.store, sa.cookie, sa.header)
+	log.Printf("got session from request: %+v", *session)
 
 	// Check if user session is valid
 	if err != nil {
 		return nil, false, errors.Wrap(err, "couldn't get user session")
 	}
 	if session.IsNew {
+		log.Println("!!! session is new")
 		return nil, false, nil
 	}
 

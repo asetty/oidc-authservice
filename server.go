@@ -5,6 +5,7 @@ package main
 import (
 	"encoding/gob"
 	"fmt"
+	"log"
 	"net/http"
 	"strings"
 
@@ -65,7 +66,8 @@ func (s *server) authenticate(w http.ResponseWriter, r *http.Request) {
 
 	logger := loggerForRequest(r)
 	logger.Info("Authenticating request...")
-
+	logger.Infof("request=%+v", r)
+	logger.Infof("authenticators=%+v", s.authenticators)
 	var userInfo user.Info
 	for i, auth := range s.authenticators {
 		resp, found, err := auth.AuthenticateRequest(r)
@@ -80,9 +82,12 @@ func (s *server) authenticate(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if found {
+			log.Println("found")
 			userInfo = resp.User
 			logger.Infof("UserInfo: %+v", userInfo)
 			break
+		} else {
+			log.Println("not found")
 		}
 	}
 	if userInfo == nil {
@@ -137,8 +142,9 @@ func (s *server) authenticate(w http.ResponseWriter, r *http.Request) {
 // authCodeFlowAuthenticationRequest initiates an OIDC Authorization Code flow
 func (s *server) authCodeFlowAuthenticationRequest(w http.ResponseWriter, r *http.Request) {
 	logger := loggerForRequest(r)
-
 	// Initiate OIDC Flow with Authorization Request.
+	log.Printf("creating new state with URL=%+v", r.URL)
+	log.Printf("creating new state with URL.String()=%s", r.URL.String())
 	state := newState(r.URL.String())
 	id, err := state.save(s.store)
 	if err != nil {
@@ -179,6 +185,7 @@ func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 		logger.Errorf("Failed to retrieve state from store: %v", err)
 		returnMessage(w, http.StatusInternalServerError, "Failed to retrieve state.")
 	}
+	log.Printf("state=%+v", *state)
 
 	ctx := setTLSContext(r.Context(), s.caBundle)
 	// Exchange the authorization code with {access, refresh, id}_token
@@ -246,11 +253,13 @@ func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 	session.Values[userSessionClaims] = claims
 	session.Values[userSessionIDToken] = rawIDToken
 	session.Values[userSessionOAuth2Tokens] = oauth2Tokens
+	logger.Printf("call session.Values=%+v", session.Values)
 	if err := session.Save(r, w); err != nil {
 		logger.Errorf("Couldn't create user session: %v", err)
 		returnMessage(w, http.StatusInternalServerError, "Error creating user session")
 		return
 	}
+	logger.Infof("request after session.Save=%+v", r)
 
 	logger.Info("Login validated with ID token, redirecting.")
 

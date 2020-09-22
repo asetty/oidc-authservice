@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"io/ioutil"
+	"log"
 	"net/http"
 
 	"github.com/coreos/go-oidc"
@@ -58,7 +59,9 @@ func GetUserInfo(ctx context.Context, provider *oidc.Provider, tokenSource oauth
 	if err != nil {
 		return nil, errors.Errorf("oidc: get access token: %v", err)
 	}
+	log.Printf("header before: %+v", req.Header)
 	token.SetAuthHeader(req)
+	log.Printf("header after: %+v", req.Header)
 
 	resp, err := doRequest(ctx, req)
 	if err != nil {
