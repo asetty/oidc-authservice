@@ -1,29 +1,45 @@
 // Copyright © 2019 Arrikto Inc.  All Rights Reserved.
 
-package main
+package state
 
 import (
-	"github.com/gorilla/sessions"
-	"github.com/pkg/errors"
+	"math/rand"
 	"net/http"
 	"net/http/httptest"
 	"time"
+
+	"github.com/gorilla/sessions"
+	"github.com/pkg/errors"
 )
 
 const oidcLoginSessionCookie = "non_existent_cookie"
 
+var nonceChars = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
+
 type state struct {
-	origURL string
+	OrigURL string
 }
 
-func newState(origURL string) *state {
+type StateFunc func(*http.Request) *state
+
+func RelativeURL(r *http.Request) *state {
 	return &state{
-		origURL: origURL,
+		OrigURL: r.URL.String(),
+	}
+}
+
+// scheme could be
+// 1. configured by user
+// 2. gotten from header e.g. X-Envoy-Forwarded-Proto
+func SchemeAndHost(r *http.Request) *state {
+	// TODO get scheme from header or config
+	return &state{
+		OrigURL: "https://" + r.Host + r.URL.String(),
 	}
 }
 
 // load retrieves a state from the store given its id.
-func load(store sessions.Store, id string) (*state, error) {
+func Load(store sessions.Store, id string) (*state, error) {
 	// Make a fake request so that the store will find the cookie
 	r := &http.Request{Header: make(http.Header)}
 	r.AddCookie(&http.Cookie{Name: oidcLoginSessionCookie, Value: id, MaxAge: 10})
@@ -37,16 +53,16 @@ func load(store sessions.Store, id string) (*state, error) {
 	}
 
 	return &state{
-		origURL: session.Values["origURL"].(string),
+		OrigURL: session.Values["origURL"].(string),
 	}, nil
 }
 
 // save persists a state to the store and returns the entry's id.
-func (s *state) save(store sessions.Store) (string, error) {
+func (s *state) Save(store sessions.Store) (string, error) {
 	session := sessions.NewSession(store, oidcLoginSessionCookie)
 	session.ID = createNonce(16)
 	session.Options.MaxAge = int(time.Hour)
-	session.Values["origURL"] = s.origURL
+	session.Values["origURL"] = s.OrigURL
 
 	// The current gorilla/sessions Store interface doesn't allow us
 	// to set the session ID.
@@ -64,4 +80,14 @@ func (s *state) save(store sessions.Store) (string, error) {
 		return "", errors.Wrap(err, "error trying to save session")
 	}
 	return c.Value, nil
+}
+
+func createNonce(length int) string {
+
+	var nonce = make([]rune, length)
+	for i := range nonce {
+		nonce[i] = nonceChars[rand.Intn(len(nonceChars))]
+	}
+
+	return string(nonce)
 }

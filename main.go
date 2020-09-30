@@ -10,6 +10,8 @@ import (
 	"path"
 	"time"
 
+	"github.com/arrikto/oidc-authservice/state"
+
 	"github.com/boltdb/bolt"
 	oidc "github.com/coreos/go-oidc"
 	"github.com/gorilla/handlers"
@@ -186,6 +188,18 @@ func main() {
 	default:
 		// Use Lax mode as the default
 		s.sessionSameSite = http.SameSiteLaxMode
+	}
+	// If sessionDomain is not set then all requests to the resource
+	// server are served from the same host as the auth service.
+	// Use only URL for redirect
+	// If sessionDomain is set, the scheme and host of the original
+	// request should be included
+	// TODO maybe this should be configurable by the user
+	// or we should always use schemeAndHost
+	if len(s.sessionDomain) == 0 {
+		s.newState = state.RelativeURL
+	} else {
+		s.newState = state.SchemeAndHost
 	}
 
 	// Setup complete, mark server ready

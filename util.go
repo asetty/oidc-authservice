@@ -8,7 +8,6 @@ import (
 	"crypto/tls"
 	"crypto/x509"
 	"encoding/json"
-	"math/rand"
 	"net/http"
 	"net/url"
 	"path"
@@ -70,16 +69,6 @@ func returnJSONMessage(w http.ResponseWriter, statusCode int, jsonMsg interface{
 
 func deleteCookie(w http.ResponseWriter, name string) {
 	http.SetCookie(w, &http.Cookie{Name: name, MaxAge: -1, Path: "/"})
-}
-
-func createNonce(length int) string {
-	nonceChars := []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789")
-	var nonce = make([]rune, length)
-	for i := range nonce {
-		nonce[i] = nonceChars[rand.Intn(len(nonceChars))]
-	}
-
-	return string(nonce)
 }
 
 func setTLSContext(ctx context.Context, caBundle []byte) context.Context {
