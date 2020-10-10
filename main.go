@@ -171,6 +171,7 @@ func main() {
 			userIDHeader: c.UserIDHeader,
 			userIDPrefix: c.UserIDPrefix,
 			groupsHeader: c.GroupsHeader,
+			tokenHeader:  c.TokenHeader,
 		},
 		sessionMaxAgeSeconds:    c.SessionMaxAge,
 		strictSessionValidation: c.StrictSessionValidation,
