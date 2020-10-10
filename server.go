@@ -63,6 +63,7 @@ type httpHeaderOpts struct {
 	userIDHeader string
 	userIDPrefix string
 	groupsHeader string
+	tokenHeader  string
 }
 
 func (s *server) authenticate(w http.ResponseWriter, r *http.Request) {
@@ -131,6 +132,27 @@ func (s *server) authenticate(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
+	// TODO:
+	// * Token should be included in return from AuthenticateRequest
+	//   response so we don't need to get it again here.
+	//   Maybe we should create ainterface use a custom user info type that
+	//   includes the session and/or token, instead of using k8s authenticator pacakage.
+	// * adding the header should be handled by userInfoToHeaders once
+	//   included in userInfo
+	// * should we create our own token? where is refresh handled?
+	// * maybe should be using oauth2.Token.SetAuthHeader (e.g. Authorization: Bearer)
+	//   instead of custom header?
+	if s.upstreamHTTPHeaderOpts.tokenHeader != "" {
+		session, err := sessionFromRequest(r, s.store, userSessionCookie, s.authHeader)
+		if err == nil {
+			token, ok := session.Values[userSessionIDToken]
+			if ok {
+				if tokStr, ok := token.(string); ok {
+					w.Header().Set(s.upstreamHTTPHeaderOpts.tokenHeader, tokStr)
+				}
+			}
+		}
+	}
 	for k, v := range userInfoToHeaders(userInfo, &s.upstreamHTTPHeaderOpts) {
 		w.Header().Set(k, v)
 	}

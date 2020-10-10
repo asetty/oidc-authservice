@@ -33,6 +33,7 @@ type config struct {
 	UserIDHeader string `split_words:"true" default:"kubeflow-userid" envconfig:"USERID_HEADER"`
 	GroupsHeader string `split_words:"true" default:"kubeflow-groups"`
 	UserIDPrefix string `split_words:"true" envconfig:"USERID_PREFIX"`
+	TokenHeader  string `split_words:"true"`
 
 	// IDToken
 	UserIDClaim       string `split_words:"true" default:"email" envconfig:"USERID_CLAIM"`
