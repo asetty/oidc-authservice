@@ -1,9 +1,11 @@
 package main
 
 import (
-	"github.com/stretchr/testify/require"
 	"os"
 	"testing"
+
+	"github.com/arrikto/oidc-authservice/settings"
+	"github.com/stretchr/testify/require"
 )
 
 func TestParseConfig(t *testing.T) {
@@ -24,7 +26,7 @@ func TestParseConfig(t *testing.T) {
 			t.Fatalf("Failed to set env `%s' to `%s'", k, v)
 		}
 	}
-	c, err := parseConfig()
+	c, err := settings.ParseConfig()
 	if err != nil {
 		t.Fatalf("Failed to parse config: %v", err)
 	}

@@ -10,6 +10,7 @@ import (
 	"path"
 	"time"
 
+	"github.com/arrikto/oidc-authservice/settings"
 	"github.com/arrikto/oidc-authservice/state"
 
 	"github.com/boltdb/bolt"
@@ -30,7 +31,7 @@ const secureCookieKeyPair = "notNeededBecauseCookieValueIsRandom"
 
 func main() {
 
-	c, err := parseConfig()
+	c, err := settings.ParseConfig()
 	if err != nil {
 		log.Fatalf("Failed to parse configuration: %+v", err)
 	}
@@ -51,8 +52,8 @@ func main() {
 
 	// Register handlers for routes
 	router := mux.NewRouter()
-	router.HandleFunc(path.Join(c.AuthserviceURLPrefix.Path, OIDCCallbackPath), s.callback).Methods(http.MethodGet)
-	router.HandleFunc(path.Join(c.AuthserviceURLPrefix.Path, SessionLogoutPath), s.logout).Methods(http.MethodPost)
+	router.HandleFunc(path.Join(c.AuthserviceURLPrefix.Path, c.OIDCCallbackPath), s.callback).Methods(http.MethodGet)
+	router.HandleFunc(path.Join(c.AuthserviceURLPrefix.Path, c.SessionLogoutPath), s.logout).Methods(http.MethodPost)
 
 	router.PathPrefix("/").Handler(whitelistMiddleware(c.SkipAuthURLs, isReady)(http.HandlerFunc(s.authenticate)))
 
@@ -66,11 +67,14 @@ func main() {
 
 	// Start web server
 	webServer := WebServer{
-		TemplatePaths: c.TemplatePath,
-		ProviderURL:   c.ProviderURL.String(),
-		ClientName:    c.ClientName,
-		ThemeURL:      resolvePathReference(c.ThemesURL, c.Theme).String(),
-		Frontend:      c.UserTemplateContext,
+		TemplatePaths:   c.TemplatePath,
+		ProviderURL:     c.ProviderURL.String(),
+		ClientName:      c.ClientName,
+		ThemeURL:        c.ThemesURL.String(),
+		Frontend:        c.UserTemplateContext,
+		HomepagePath:    c.HomepagePath,
+		AfterLogoutPath: c.AfterLogoutPath,
+		ThemesPath:      c.ThemesPath,
 	}
 	log.Infof("Starting web server at %v:%v", c.Hostname, c.WebServerPort)
 	go func() {
