@@ -1,13 +1,14 @@
 package main
 
 import (
-	"github.com/gorilla/handlers"
-	"github.com/gorilla/mux"
 	"html/template"
 	"io/ioutil"
 	"net/http"
 	"path/filepath"
 	"strings"
+
+	"github.com/gorilla/handlers"
+	"github.com/gorilla/mux"
 )
 
 const (
@@ -15,19 +16,16 @@ const (
 	tmplAfterLogout = "after_logout.html"
 )
 
-var (
-	HomepagePath    = "/site/homepage"
-	AfterLogoutPath = "/site/after_logout"
-	ThemesPath      = "/site/themes"
-)
-
 type WebServer struct {
 	TemplatePaths []string
 	// Frontend-related values for context
-	ProviderURL string
-	ClientName  string
-	ThemeURL    string
-	Frontend    map[string]string
+	ProviderURL     string
+	ClientName      string
+	ThemeURL        string
+	Frontend        map[string]string
+	HomepagePath    string
+	AfterLogoutPath string
+	ThemesPath      string
 }
 
 func (s *WebServer) Start(addr string) error {
@@ -70,15 +68,15 @@ func (s *WebServer) Start(addr string) error {
 		ThemeURL:    s.ThemeURL,
 		ClientName:  s.ClientName,
 	}
-	router.HandleFunc(HomepagePath, siteHandler(templates.Lookup(tmplLanding), data)).Methods(http.MethodGet)
-	router.HandleFunc(AfterLogoutPath, siteHandler(templates.Lookup(tmplAfterLogout), data)).Methods(http.MethodGet)
+	router.HandleFunc(s.HomepagePath, siteHandler(templates.Lookup(tmplLanding), data)).Methods(http.MethodGet)
+	router.HandleFunc(s.AfterLogoutPath, siteHandler(templates.Lookup(tmplAfterLogout), data)).Methods(http.MethodGet)
 
 	// Themes
 	router.
-		PathPrefix(ThemesPath).
+		PathPrefix(s.ThemesPath).
 		Handler(
 			http.StripPrefix(
-				ThemesPath,
+				s.ThemesPath,
 				http.FileServer(http.Dir("web/themes")),
 			),
 		)

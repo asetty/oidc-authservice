@@ -10,7 +10,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/url"
-	"path"
 	"strings"
 
 	log "github.com/sirupsen/logrus"
@@ -96,12 +95,6 @@ func mustParseURL(rawURL string) *url.URL {
 		panic(err)
 	}
 	return url
-}
-
-func resolvePathReference(u *url.URL, p string) *url.URL {
-	ret := *u
-	ret.Path = path.Join(ret.Path, p)
-	return &ret
 }
 
 func doRequest(ctx context.Context, req *http.Request) (*http.Response, error) {

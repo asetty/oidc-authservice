@@ -18,11 +18,6 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 )
 
-var (
-	OIDCCallbackPath  = "/oidc/callback"
-	SessionLogoutPath = "/logout"
-)
-
 func init() {
 	// Register type for claims.
 	gob.Register(map[string]interface{}{})

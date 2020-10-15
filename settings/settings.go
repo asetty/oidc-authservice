@@ -1,14 +1,15 @@
-package main
+package settings
 
 import (
 	"net/url"
 	"os"
+	"path"
 	"strings"
 
 	"github.com/kelseyhightower/envconfig"
 )
 
-type config struct {
+type Config struct {
 	// OIDC Provider
 	ProviderURL *url.URL `required:"true" split_words:"true" envconfig:"OIDC_PROVIDER"`
 
@@ -19,6 +20,8 @@ type config struct {
 	RedirectURL             *url.URL `split_words:"true"`
 	OIDCScopes              []string `split_words:"true" default:"openid,email"`
 	StrictSessionValidation bool     `split_words:"true"`
+	OIDCCallbackPath        string   `split_words:"true" default:"/oidc/callback"`
+	SessionLogoutPath       string   `split_words:"true" default:"/logout"`
 
 	// General
 	AuthserviceURLPrefix *url.URL `required:"true" split_words:"true"`
@@ -39,6 +42,7 @@ type config struct {
 	UserIDClaim       string `split_words:"true" default:"email" envconfig:"USERID_CLAIM"`
 	UserIDTokenHeader string `split_words:"true" envconfig:"USERID_TOKEN_HEADER"`
 	GroupsClaim       string `split_words:"true" default:"groups"`
+	GroupsMethod      string `split_words:"true" default:"CLAIM"`
 
 	// Infra
 	Hostname           string `split_words:"true" envconfig:"SERVER_HOSTNAME"`
@@ -57,27 +61,29 @@ type config struct {
 	Theme               string            `split_words:"true" default:"kubeflow"`
 	TemplatePath        []string          `split_words:"true"`
 	UserTemplateContext map[string]string `ignored:"true"`
+	HomepagePath        string            `split_words:"true" default:"/site/homepage"`
+	AfterLogoutPath     string            `split_words:"true" default:"/site/after_logout"`
+	ThemesPath          string            `split_words:"true" default:"/site/themes"`
 
 	// Authorization
 	GroupsAllowlist []string `split_words:"true" default:"*"`
 }
 
-func parseConfig() (*config, error) {
-
-	var c config
+func ParseConfig() (*Config, error) {
+	var c Config
 	err := envconfig.Process("", &c)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(c.RedirectURL.String()) == 0 {
-		c.RedirectURL = resolvePathReference(c.AuthserviceURLPrefix, OIDCCallbackPath)
+		c.RedirectURL = resolvePathReference(c.AuthserviceURLPrefix, c.OIDCCallbackPath)
 	}
 	if len(c.HomepageURL.String()) == 0 {
-		c.HomepageURL = resolvePathReference(c.AuthserviceURLPrefix, HomepagePath)
+		c.HomepageURL = resolvePathReference(c.AuthserviceURLPrefix, c.HomepagePath)
 	}
 	if len(c.AfterLogoutURL.String()) == 0 {
-		c.AfterLogoutURL = resolvePathReference(c.AuthserviceURLPrefix, AfterLogoutPath)
+		c.AfterLogoutURL = resolvePathReference(c.AuthserviceURLPrefix, c.AfterLogoutPath)
 	}
 
 	c.UserTemplateContext = getEnvsFromPrefix("TEMPLATE_CONTEXT_")
@@ -90,7 +96,7 @@ func parseConfig() (*config, error) {
 
 	c.TemplatePath = trimSpaceFromStringSliceElements(c.TemplatePath)
 	c.TemplatePath = ensureInSlice("web/templates/default", c.TemplatePath)
-
+	c.ThemesURL = resolvePathReference(c.ThemesURL, c.Theme)
 	return &c, err
 }
 
@@ -125,4 +131,22 @@ func ensureInSlice(elem string, slice []string) []string {
 	}
 	slice = append([]string{elem}, slice...)
 	return slice
+}
+
+func resolvePathReference(u *url.URL, p string) *url.URL {
+	ret := *u
+	ret.Path = path.Join(ret.Path, p)
+	return &ret
+}
+
+func interfaceSliceToStringSlice(in []interface{}) []string {
+	if in == nil {
+		return nil
+	}
+
+	res := []string{}
+	for _, elem := range in {
+		res = append(res, elem.(string))
+	}
+	return res
 }
