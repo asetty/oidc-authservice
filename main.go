@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"path"
+	"strings"
 	"time"
 
 	"github.com/arrikto/oidc-authservice/settings"
@@ -169,7 +170,6 @@ func main() {
 		afterLogoutRedirectURL: c.AfterLogoutURL.String(),
 		idTokenOpts: jwtClaimOpts{
 			userIDClaim: c.UserIDClaim,
-			groupsClaim: c.GroupsClaim,
 		},
 		upstreamHTTPHeaderOpts: httpHeaderOpts{
 			userIDHeader: c.UserIDHeader,
@@ -205,6 +205,16 @@ func main() {
 		s.newState = state.RelativeURL
 	} else {
 		s.newState = state.SchemeAndHost
+	}
+
+	methodConstructor, ok := groupMethods[strings.ToLower(c.GroupsMethod)]
+	if !ok {
+		log.Fatalf("Invalid group method %q", c.GroupsMethod)
+	}
+
+	s.groupsMethod, err = methodConstructor(c)
+	if err != nil {
+		log.Fatalf("Error initializing group method: %v", err)
 	}
 
 	// Setup complete, mark server ready
