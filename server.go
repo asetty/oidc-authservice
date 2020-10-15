@@ -8,6 +8,10 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/arrikto/oidc-authservice/groups"
+	"github.com/arrikto/oidc-authservice/groups/claim"
+	"github.com/arrikto/oidc-authservice/groups/google"
+	"github.com/arrikto/oidc-authservice/settings"
 	"github.com/arrikto/oidc-authservice/state"
 
 	oidc "github.com/coreos/go-oidc"
@@ -18,6 +22,11 @@ import (
 	"k8s.io/apiserver/pkg/authentication/authenticator"
 	"k8s.io/apiserver/pkg/authentication/user"
 )
+
+var groupMethods = map[string]func(*settings.Config) (groups.GroupsMethod, error){
+	"claim":  claim.NewClaimMethod,
+	"google": google.NewGoogleMethod,
+}
 
 func init() {
 	// Register type for claims.
@@ -44,13 +53,13 @@ type server struct {
 	caBundle                []byte
 	sessionSameSite         http.SameSite
 	newState                state.StateFunc
+	groupsMethod            groups.GroupsMethod
 }
 
 // jwtClaimOpts specifies the location of the user's identity inside a JWT's
 // claims.
 type jwtClaimOpts struct {
 	userIDClaim string
-	groupsClaim string
 }
 
 // httpHeaderOpts specifies the location of the user's identity inside HTTP
@@ -250,6 +259,9 @@ func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 	session.Options.SameSite = s.sessionSameSite
 	session.Options.Domain = s.sessionDomain
 
+	// TODO maybe this should bet encapsulated into GetUserInfo
+	// What's the point of dealing with the raw claims here when
+	// we could use populate a struct field
 	userID, ok := claims[s.idTokenOpts.userIDClaim].(string)
 	if !ok {
 		logger.Errorf("Couldn't find claim `%s' in claims `%v'", s.idTokenOpts.userIDClaim, claims)
@@ -258,10 +270,12 @@ func (s *server) callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	groups := []string{}
-	groupsClaim := claims[s.idTokenOpts.groupsClaim]
-	if groupsClaim != nil {
-		groups = interfaceSliceToStringSlice(groupsClaim.([]interface{}))
+	// TODO maybe GetGroups could go in GetUserInfo
+	// and add a Groups field to UserInfo
+	// Reconsider the structure of the code here in general
+	groups, err := s.groupsMethod.GetGroups(claims)
+	if err != nil {
+		logger.Errorf("Failed to get user groups: %v", err)
 	}
 
 	session.Values[userSessionUserID] = userID
