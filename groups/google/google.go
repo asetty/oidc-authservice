@@ -1,59 +1,91 @@
 package google
 
 import (
+	"context"
+	"fmt"
+	"io/ioutil"
+
 	"github.com/arrikto/oidc-authservice/groups"
 	"github.com/arrikto/oidc-authservice/settings"
+
+	log "github.com/sirupsen/logrus"
+	"golang.org/x/oauth2/google"
+	admin "google.golang.org/api/admin/directory/v1"
 )
 
-//TODO decide how to authenticate to get groups
-// * user's token
-// * google service account file similar to dex
-// * ...
-// * maybe should do at same time as getting other claims (GetUserInfo)
-//   (refactor from GroupsMethod to ProviderFlavor, customize getting
-//    groups and userid, if desired.)
-type googleMethod struct{}
+var emailClaim = "email"
 
-func NewGoogleMethod(config *settings.Config) (groups.GroupsMethod, error) {
-	// _, err := admin.NewService(context.Background())
-	// if err != nil {
-	// 	return nil, err
-	// }
-	return &googleMethod{}, nil
+type googleMethod struct {
+	adminSvc *admin.Service
 }
 
-func (_ *googleMethod) GetGroups(claims map[string]interface{}) ([]string, error) {
-	//TODO implement
-	// var userGroups []string
-	// var err error
-	// groupsList := &admin.Groups{}
-	// for {
-	// 	groupsList, err = c.adminSrv.Groups.List().
-	// 		UserKey(email).PageToken(groupsList.NextPageToken).Do()
-	// 	if err != nil {
-	// 		return nil, fmt.Errorf("could not list groups: %v", err)
-	// 	}
+func createDirectoryService(serviceAccountFilePath string, email string) (*admin.Service, error) {
+	if serviceAccountFilePath == "" && email == "" {
+		return nil, nil
+	}
+	if serviceAccountFilePath == "" || email == "" {
+		return nil, fmt.Errorf("directory service requires both serviceAccountFilePath and adminEmail")
+	}
+	jsonCredentials, err := ioutil.ReadFile(serviceAccountFilePath)
+	if err != nil {
+		return nil, fmt.Errorf("error reading credentials from file: %v", err)
+	}
 
-	// 	for _, group := range groupsList.Groups {
-	// 		// TODO (joelspeed): Make desired group key configurable
-	// 		userGroups = append(userGroups, group.Email)
-	// 	}
+	config, err := google.JWTConfigFromJSON(jsonCredentials, admin.AdminDirectoryGroupReadonlyScope)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse client secret file to config: %v", err)
+	}
 
-	// 	if groupsList.NextPageToken == "" {
-	// 		break
-	// 	}
-	// }
+	// Impersonate an admin. This is mandatory for the admin APIs.
+	config.Subject = email
 
-	// return userGroups, nil
+	ctx := context.Background()
+	client := config.Client(ctx)
 
-	// TODO
-	// Get groups either using user token or api credentials?
-	// how do we get token source like in authenticator_session?
-	// other refactoring?
-	// option.WithTokenSource()
-	// client, err := admin.NewService(context.Background())
-	// if err != nil {
-	// 	return nil, err
-	// }
-	return []string{}, nil
+	svc, err := admin.New(client)
+	if err != nil {
+		return nil, fmt.Errorf("unable to create directory service %v", err)
+	}
+	return svc, nil
+}
+
+func NewGoogleMethod(config *settings.Config) (groups.GroupsMethod, error) {
+	log.Info("Intializing google directory service")
+	svc, err := createDirectoryService(config.GoogleServiceAccountFilePath, config.GoogleAdminEmail)
+	if err != nil {
+		return nil, fmt.Errorf("failed intializing google directory service: %v", err)
+	}
+	return &googleMethod{adminSvc: svc}, nil
+}
+
+func (g *googleMethod) GetGroups(claims map[string]interface{}) ([]string, error) {
+	rawEmail, ok := claims[emailClaim]
+	if !ok {
+		return nil, fmt.Errorf("did not find email claim")
+	}
+	email, ok := rawEmail.(string)
+	if !ok {
+		return nil, fmt.Errorf("error getting email claim value")
+	}
+	var userGroups []string
+	var err error
+	groupsList := &admin.Groups{}
+	for {
+		groupsList, err = g.adminSvc.Groups.List().
+			UserKey(email).PageToken(groupsList.NextPageToken).Do()
+		if err != nil {
+			return nil, fmt.Errorf("could not list groups: %v", err)
+		}
+
+		log.Printf("email=%s, groups=%v", email, groupsList.Groups)
+		for _, group := range groupsList.Groups {
+			userGroups = append(userGroups, group.Email)
+		}
+
+		if groupsList.NextPageToken == "" {
+			break
+		}
+	}
+
+	return userGroups, nil
 }
