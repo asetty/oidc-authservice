@@ -42,7 +42,11 @@ type Config struct {
 	UserIDClaim       string `split_words:"true" default:"email" envconfig:"USERID_CLAIM"`
 	UserIDTokenHeader string `split_words:"true" envconfig:"USERID_TOKEN_HEADER"`
 	GroupsClaim       string `split_words:"true" default:"groups"`
-	GroupsMethod      string `split_words:"true" default:"CLAIM"`
+	GroupsMethod      string `split_words:"true" default:"claim"`
+
+	// OIDC provider specific config
+	GoogleServiceAccountFilePath string `split_words:"true" envconfig:"GOOGLE_SERVICEACCT_PATH"`
+	GoogleAdminEmail             string `split_words:"true"`
 
 	// Infra
 	Hostname           string `split_words:"true" envconfig:"SERVER_HOSTNAME"`

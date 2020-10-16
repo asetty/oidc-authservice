@@ -1,5 +1,4 @@
 // Copyright © 2019 Arrikto Inc.  All Rights Reserved.
-
 package main
 
 import (

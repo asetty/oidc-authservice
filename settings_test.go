@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/arrikto/oidc-authservice/settings"
+
 	"github.com/stretchr/testify/require"
 )
 
